@@ -13,7 +13,9 @@ import (
 // That is dependency inversion: usecase does not know about SQLite.
 type NameRepository interface {
 	FindRace(slug string) (domain.Race, error)
+	FindStyles(raceID int) ([]domain.NameStyle, error)
 	FindPatterns(raceID int) ([]domain.NamePattern, error)
+	FindPatternsByStyle(raceID int, styleID int) ([]domain.NamePattern, error)
 	FindComponents(raceID int, componentType string, gender domain.Gender) ([]domain.NameComponent, error)
 	FindCompositeParts(raceID int, position string) ([]domain.CompositePart, error)
 }
@@ -42,7 +44,7 @@ func (g *NameGenerator) Generate(raceSlug string, gender domain.Gender) (domain.
 		return domain.GeneratedName{}, err // early return
 	}
 
-	patterns, err := g.repo.FindPatterns(race.ID)
+	patterns, err := g.resolvePatterns(race)
 	if err != nil {
 		return domain.GeneratedName{}, err // early return
 	}
@@ -63,14 +65,33 @@ func (g *NameGenerator) Generate(raceSlug string, gender domain.Gender) (domain.
 	}, nil
 }
 
-// buildParts builds each part of the name according to the race pattern.
-// Private function (lowercase) — only used within this package.
+// resolvePatterns picks the correct patterns for a race.
+// Races with styles (tiefling, half-elf) pick one style randomly,
+// then return only that style's patterns.
+// Races without styles return all their patterns directly.
+func (g *NameGenerator) resolvePatterns(race domain.Race) ([]domain.NamePattern, error) {
+	styles, err := g.repo.FindStyles(race.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// No styles: return patterns directly (human, dwarf, elf, etc.)
+	if len(styles) == 0 {
+		return g.repo.FindPatterns(race.ID)
+	}
+
+	// Pick one style at random and return its patterns
+	style := pickRandom(g.rand, styles)
+	return g.repo.FindPatternsByStyle(race.ID, style.ID)
+}
+
+// buildParts builds each part of the name according to the pattern.
 func (g *NameGenerator) buildParts(
 	race domain.Race,
 	patterns []domain.NamePattern,
 	gender domain.Gender,
 ) ([]string, error) {
-	var parts []string // zero value of slice is nil, append works fine
+	var parts []string
 
 	for _, pattern := range patterns {
 		// Skip non-required components randomly
@@ -78,26 +99,41 @@ func (g *NameGenerator) buildParts(
 			continue
 		}
 
-		part, err := g.buildComponent(race.ID, pattern.ComponentType, gender)
-		if err != nil {
-			return nil, err // early return inside loop
+		// Determine how many times to include this component (gnome nicknames)
+		count := 1
+		if pattern.MaxCount > 1 {
+			count = g.rand.Intn(pattern.MaxCount + 1) // 0 to MaxCount
 		}
 
-		parts = append(parts, part)
+		for i := 0; i < count; i++ {
+			part, err := g.buildComponent(race.ID, pattern.ComponentType, gender)
+			if err != nil {
+				return nil, err // early return
+			}
+			parts = append(parts, part)
+		}
 	}
 
 	return parts, nil
 }
 
 // buildComponent resolves a single name component.
-// Delegates to buildComposite for "composite_nickname", otherwise queries components.
+// Delegates to buildComposite for "last_name" on races that use composite parts.
 func (g *NameGenerator) buildComponent(
 	raceID int,
 	componentType string,
 	gender domain.Gender,
 ) (string, error) {
-	if componentType == "composite_nickname" {
-		return g.buildComposite(raceID)
+	// Check if this race uses composite parts for last_name
+	if componentType == "last_name" {
+		parts, err := g.repo.FindCompositeParts(raceID, "first")
+		if err != nil {
+			return "", err
+		}
+		// If composite parts exist for this race, build composite last name
+		if len(parts) > 0 {
+			return g.buildComposite(raceID)
+		}
 	}
 
 	candidates, err := g.repo.FindComponents(raceID, componentType, gender)
@@ -112,8 +148,8 @@ func (g *NameGenerator) buildComponent(
 	return pickRandom(g.rand, candidates).Value, nil
 }
 
-// buildComposite builds the compound nickname for races like Halflings.
-// "first" + "second" → "Hot" + "Pot" → "Hot Pot"
+// buildComposite builds a compound last name for halflings.
+// "Brush" + "gather" → "Brushgather"
 func (g *NameGenerator) buildComposite(raceID int) (string, error) {
 	first, err := g.repo.FindCompositeParts(raceID, "first")
 	if err != nil {
@@ -129,7 +165,7 @@ func (g *NameGenerator) buildComposite(raceID int) (string, error) {
 		return "", errors.New("not enough composite parts for this race")
 	}
 
-	return pickRandom(g.rand, first).Value + " " + pickRandom(g.rand, second).Value, nil
+	return pickRandom(g.rand, first).Value + pickRandom(g.rand, second).Value, nil
 }
 
 // pickRandom selects a random element from a slice.

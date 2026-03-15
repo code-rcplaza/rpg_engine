@@ -55,29 +55,68 @@ func (r *NameRepo) FindRace(slug string) (domain.Race, error) {
 		return domain.Race{}, err
 	}
 
-	return domain.Race{
-		ID:   row.ID,
-		Slug: row.Slug,
-		Name: row.Name,
-	}, nil
+	return domain.Race{ID: row.ID, Slug: row.Slug, Name: row.Name}, nil
 }
 
-// FindPatterns retrieves all name patterns for a race, ordered by position.
-func (r *NameRepo) FindPatterns(raceID int) ([]domain.NamePattern, error) {
+// FindStyles retrieves all name styles for a race.
+// Returns empty slice if the race has no styles (most races).
+func (r *NameRepo) FindStyles(raceID int) ([]domain.NameStyle, error) {
 	var rows []struct {
-		ID            int    `db:"id"`
-		RaceID        int    `db:"race_id"`
-		Order         int    `db:"order"`
-		ComponentType string `db:"component_type"`
-		Required      int    `db:"required"` // SQLite stores bool as 0/1
+		ID     int    `db:"id"`
+		RaceID int    `db:"race_id"`
+		Slug   string `db:"slug"`
 	}
 
 	err := r.db.Select(&rows, `
-		SELECT id, race_id, "order", component_type, required
-		FROM name_patterns
+		SELECT id, race_id, slug
+		FROM name_styles
 		WHERE race_id = ?
+	`, raceID)
+	if err != nil {
+		return nil, err
+	}
+
+	styles := make([]domain.NameStyle, len(rows))
+	for i, row := range rows {
+		styles[i] = domain.NameStyle{ID: row.ID, RaceID: row.RaceID, Slug: row.Slug}
+	}
+
+	return styles, nil
+}
+
+// FindPatterns retrieves all patterns for a race that have no style (style_id IS NULL).
+func (r *NameRepo) FindPatterns(raceID int) ([]domain.NamePattern, error) {
+	return r.queryPatterns(`
+		SELECT id, race_id, style_id, "order", component_type, required, max_count
+		FROM name_patterns
+		WHERE race_id = ? AND style_id IS NULL
 		ORDER BY "order" ASC
 	`, raceID)
+}
+
+// FindPatternsByStyle retrieves patterns for a specific style.
+func (r *NameRepo) FindPatternsByStyle(raceID int, styleID int) ([]domain.NamePattern, error) {
+	return r.queryPatterns(`
+		SELECT id, race_id, style_id, "order", component_type, required, max_count
+		FROM name_patterns
+		WHERE race_id = ? AND style_id = ?
+		ORDER BY "order" ASC
+	`, raceID, styleID)
+}
+
+// queryPatterns is a private helper that runs a pattern query and maps the rows.
+func (r *NameRepo) queryPatterns(query string, args ...any) ([]domain.NamePattern, error) {
+	var rows []struct {
+		ID            int     `db:"id"`
+		RaceID        int     `db:"race_id"`
+		StyleID       *int    `db:"style_id"` // pointer because it's nullable
+		Order         int     `db:"order"`
+		ComponentType string  `db:"component_type"`
+		Required      int     `db:"required"`
+		MaxCount      int     `db:"max_count"`
+	}
+
+	err := r.db.Select(&rows, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -87,9 +126,11 @@ func (r *NameRepo) FindPatterns(raceID int) ([]domain.NamePattern, error) {
 		patterns[i] = domain.NamePattern{
 			ID:            row.ID,
 			RaceID:        row.RaceID,
+			StyleID:       row.StyleID,
 			Order:         row.Order,
 			ComponentType: row.ComponentType,
-			Required:      row.Required == 1, // convert int to bool
+			Required:      row.Required == 1,
+			MaxCount:      row.MaxCount,
 		}
 	}
 
@@ -97,7 +138,6 @@ func (r *NameRepo) FindPatterns(raceID int) ([]domain.NamePattern, error) {
 }
 
 // FindComponents retrieves name components filtered by race, type and gender.
-// If gender is GenderNeutral, returns components for any gender.
 func (r *NameRepo) FindComponents(raceID int, componentType string, gender domain.Gender) ([]domain.NameComponent, error) {
 	var rows []struct {
 		ID            int    `db:"id"`
@@ -107,7 +147,6 @@ func (r *NameRepo) FindComponents(raceID int, componentType string, gender domai
 		Value         string `db:"value"`
 	}
 
-	// Neutral gender means: return all components regardless of gender
 	var err error
 	if gender == domain.GenderNeutral {
 		err = r.db.Select(&rows, `
