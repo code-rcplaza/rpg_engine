@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/code-rcplaza/rpg_engine/internal/domain"
-	"github.comcode-rcplaza/rpg_engine/internal/usecase"
+	"github.com/code-rcplaza/rpg_engine/internal/usecase"
 )
 
-// mockNameRepo implementa NameRepository con datos hardcodeados.
-// No hay DB, no hay red — los tests corren en microsegundos.
-// Go no necesita librerías de mocking: si satisface la interfaz, funciona.
+// mockNameRepo implements NameRepository with hardcoded data.
+// No DB, no network — tests run in microseconds.
+// Go needs no mocking libraries: if it satisfies the interface, it works.
 type mockNameRepo struct {
 	races      map[string]domain.Race
 	patterns   map[int][]domain.NamePattern
@@ -21,7 +21,7 @@ type mockNameRepo struct {
 func (m *mockNameRepo) FindRace(slug string) (domain.Race, error) {
 	race, ok := m.races[slug]
 	if !ok {
-		return domain.Race{}, &domain.NotFoundError{Entity: "raza", ID: slug}
+		return domain.Race{}, &domain.NotFoundError{Entity: "race", ID: slug}
 	}
 	return race, nil
 }
@@ -46,48 +46,48 @@ func (m *mockNameRepo) FindCompositeParts(raceID int, position string) ([]domain
 	return byPos[position], nil
 }
 
-// newSeededGenerator crea un generador con semilla fija.
-// Mismo seed → mismo resultado → tests deterministas.
+// newSeededGenerator creates a generator with a fixed seed.
+// Same seed → same result → deterministic tests.
 func newSeededGenerator(repo usecase.NameRepository) *usecase.NameGenerator {
 	return usecase.NewNameGenerator(repo, rand.New(rand.NewSource(42)))
 }
 
 // --- Tests ---
 
-// TestGenerate usa table-driven tests: el patrón idiomático de Go.
-// Un solo loop cubre todos los casos — fácil de extender.
+// TestGenerate uses table-driven tests: the idiomatic Go pattern.
+// A single loop covers all cases — easy to extend.
 func TestGenerate(t *testing.T) {
 	repo := buildTestRepo()
 
 	tests := []struct {
-		name      string // descripción del caso
+		name      string
 		raceSlug  string
 		gender    domain.Gender
-		wantParts int  // cuántas partes esperamos en el nombre
+		wantParts int
 		wantErr   bool
 	}{
 		{
-			name:      "humano masculino genera nombre y apellido",
-			raceSlug:  "humano",
+			name:      "human male generates first name and last name",
+			raceSlug:  "human",
 			gender:    domain.GenderMale,
 			wantParts: 2,
 			wantErr:   false,
 		},
 		{
-			name:      "mediano genera nombre y apodo compuesto",
-			raceSlug:  "mediano",
+			name:      "halfling generates first name and composite nickname",
+			raceSlug:  "halfling",
 			gender:    domain.GenderNeutral,
 			wantParts: 2,
 			wantErr:   false,
 		},
 		{
-			name:     "raza inexistente retorna error",
-			raceSlug: "dragon_cosmico",
+			name:     "unknown race returns error",
+			raceSlug: "cosmic_dragon",
 			gender:   domain.GenderNeutral,
 			wantErr:  true,
 		},
 		{
-			name:     "slug vacío retorna error",
+			name:     "empty slug returns error",
 			raceSlug: "",
 			gender:   domain.GenderNeutral,
 			wantErr:  true,
@@ -100,80 +100,76 @@ func TestGenerate(t *testing.T) {
 
 			result, err := gen.Generate(tt.raceSlug, tt.gender)
 
-			// Verificar error
 			if tt.wantErr && err == nil {
-				t.Fatal("esperaba error pero no hubo ninguno")
+				t.Fatal("expected error but got none")
 			}
 			if !tt.wantErr && err != nil {
-				t.Fatalf("no esperaba error, pero obtuvo: %v", err)
+				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Si se esperaba error no verificamos el resultado
 			if tt.wantErr {
 				return
 			}
 
-			// Verificar partes del nombre
 			if len(result.Parts) != tt.wantParts {
-				t.Errorf("esperaba %d partes, obtuvo %d: %v", tt.wantParts, len(result.Parts), result.Parts)
+				t.Errorf("expected %d parts, got %d: %v", tt.wantParts, len(result.Parts), result.Parts)
 			}
 
-			// El nombre completo nunca puede estar vacío si no hubo error
 			if result.Full == "" {
-				t.Error("nombre completo no puede estar vacío")
+				t.Error("full name cannot be empty")
 			}
 		})
 	}
 }
 
-func TestGenerate_NombreCompletoUnePartes(t *testing.T) {
+func TestGenerate_FullNameJoinsParts(t *testing.T) {
 	repo := buildTestRepo()
 	gen := newSeededGenerator(repo)
 
-	result, err := gen.Generate("humano", domain.GenderMale)
+	result, err := gen.Generate("human", domain.GenderMale)
 	if err != nil {
-		t.Fatalf("no esperaba error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
 	expected := result.Parts[0] + " " + result.Parts[1]
 	if result.Full != expected {
-		t.Errorf("Full=%q no coincide con Parts unidos=%q", result.Full, expected)
+		t.Errorf("Full=%q does not match joined Parts=%q", result.Full, expected)
 	}
 }
 
-// buildTestRepo construye el mock con datos de prueba.
-// Separado para reusar en múltiples tests.
+// buildTestRepo builds the mock with test data.
+// Kept separate so multiple tests can reuse it.
 func buildTestRepo() *mockNameRepo {
 	return &mockNameRepo{
 		races: map[string]domain.Race{
-			"humano":  {ID: 1, Slug: "humano", Name: "Humano"},
-			"mediano": {ID: 2, Slug: "mediano", Name: "Mediano"},
+			"human":    {ID: 1, Slug: "human", Name: "Human"},
+			"halfling": {ID: 2, Slug: "halfling", Name: "Halfling"},
 		},
 		patterns: map[int][]domain.NamePattern{
-			1: { // humano
-				{ID: 1, RaceID: 1, Order: 1, ComponentType: "nombre_pila", Required: true},
-				{ID: 2, RaceID: 1, Order: 2, ComponentType: "apellido", Required: true},
+			1: { // human
+				{ID: 1, RaceID: 1, Order: 1, ComponentType: "first_name", Required: true},
+				{ID: 2, RaceID: 1, Order: 2, ComponentType: "last_name", Required: true},
 			},
-			2: { // mediano
-				{ID: 3, RaceID: 2, Order: 1, ComponentType: "nombre_pila", Required: true},
-				{ID: 4, RaceID: 2, Order: 2, ComponentType: "apodo_compuesto", Required: true},
+			2: { // halfling
+				{ID: 3, RaceID: 2, Order: 1, ComponentType: "first_name", Required: true},
+				{ID: 4, RaceID: 2, Order: 2, ComponentType: "composite_nickname", Required: true},
 			},
 		},
 		components: map[int]map[string][]domain.NameComponent{
-			1: { // humano
-				"nombre_pila": {
-					{ID: 1, Value: "Juan"},
-					{ID: 2, Value: "Pedro"},
+			1: { // human
+				"first_name": {
+					{ID: 1, Value: "John"},
+					{ID: 2, Value: "Peter"},
 					{ID: 3, Value: "Diego"},
 				},
-				"apellido": {
-					{ID: 4, Value: "García"},
-					{ID: 5, Value: "López"},
-					{ID: 6, Value: "Martínez"},
+				"last_name": {
+					{ID: 4, Value: "Johnson"},
+					{ID: 5, Value: "Smith"},
+					{ID: 6, Value: "Martinez"},
 				},
 			},
-			2: { // mediano
-				"nombre_pila": {
+			2: { // halfling
+				"first_name": {
 					{ID: 7, Value: "Fosco"},
 					{ID: 8, Value: "Bilbo"},
 					{ID: 9, Value: "Drogo"},
@@ -181,16 +177,16 @@ func buildTestRepo() *mockNameRepo {
 			},
 		},
 		composites: map[int]map[string][]domain.CompositePart{
-			2: { // mediano
-				"primera": {
-					{ID: 1, Value: "Olla"},
-					{ID: 2, Value: "Barril"},
-					{ID: 3, Value: "Pipa"},
+			2: { // halfling
+				"first": {
+					{ID: 1, Value: "Hot"},
+					{ID: 2, Value: "Barrel"},
+					{ID: 3, Value: "Pipe"},
 				},
-				"segunda": {
-					{ID: 4, Value: "Caliente"},
-					{ID: 5, Value: "Viejo"},
-					{ID: 6, Value: "Roto"},
+				"second": {
+					{ID: 4, Value: "Pot"},
+					{ID: 5, Value: "Old"},
+					{ID: 6, Value: "Broken"},
 				},
 			},
 		},

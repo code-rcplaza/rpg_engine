@@ -8,9 +8,9 @@ import (
 	"github.com/code-rcplaza/rpg_engine/internal/domain"
 )
 
-// NameRepository define QUÉ necesita el usecase de la capa de datos.
-// La interfaz vive acá (en usecase), no en infrastructure.
-// Eso es la inversión de dependencias: usecase no conoce SQLite.
+// NameRepository defines what the usecase needs from the data layer.
+// The interface lives here (in usecase), not in infrastructure.
+// That is dependency inversion: usecase does not know about SQLite.
 type NameRepository interface {
 	FindRace(slug string) (domain.Race, error)
 	FindPatterns(raceID int) ([]domain.NamePattern, error)
@@ -18,23 +18,23 @@ type NameRepository interface {
 	FindCompositeParts(raceID int, position string) ([]domain.CompositePart, error)
 }
 
-// NameGenerator contiene la lógica de generación.
-// Depende de la interfaz, nunca de una implementación concreta.
+// NameGenerator holds the name generation logic.
+// It depends on the interface, never on a concrete implementation.
 type NameGenerator struct {
 	repo NameRepository
-	rand *rand.Rand // inyectado para que los tests sean deterministas
+	rand *rand.Rand // injected so tests can be deterministic
 }
 
-// NewNameGenerator es el constructor. En Go los constructores son funciones New*.
+// NewNameGenerator is the constructor. Go constructors are New* functions.
 func NewNameGenerator(repo NameRepository, r *rand.Rand) *NameGenerator {
 	return &NameGenerator{repo: repo, rand: r}
 }
 
-// Generate genera un nombre completo para la raza y género dados.
-// Nota los early returns: cada error sale inmediatamente.
+// Generate produces a full name for the given race slug and gender.
+// Notice the early returns: each error exits immediately.
 func (g *NameGenerator) Generate(raceSlug string, gender domain.Gender) (domain.GeneratedName, error) {
 	if raceSlug == "" {
-		return domain.GeneratedName{}, errors.New("raza no puede estar vacía")
+		return domain.GeneratedName{}, errors.New("race slug cannot be empty")
 	}
 
 	race, err := g.repo.FindRace(raceSlug)
@@ -48,7 +48,7 @@ func (g *NameGenerator) Generate(raceSlug string, gender domain.Gender) (domain.
 	}
 
 	if len(patterns) == 0 {
-		return domain.GeneratedName{}, errors.New("raza sin patrón de nombre definido")
+		return domain.GeneratedName{}, errors.New("no name pattern defined for this race")
 	}
 
 	parts, err := g.buildParts(race, patterns, gender)
@@ -63,24 +63,24 @@ func (g *NameGenerator) Generate(raceSlug string, gender domain.Gender) (domain.
 	}, nil
 }
 
-// buildParts construye cada parte del nombre según el patrón de la raza.
-// Función privada (minúscula) — solo la usa este paquete.
+// buildParts builds each part of the name according to the race pattern.
+// Private function (lowercase) — only used within this package.
 func (g *NameGenerator) buildParts(
 	race domain.Race,
 	patterns []domain.NamePattern,
 	gender domain.Gender,
 ) ([]string, error) {
-	var parts []string // zero value de slice es nil, append funciona igual
+	var parts []string // zero value of slice is nil, append works fine
 
 	for _, pattern := range patterns {
-		// Si el componente no es obligatorio, lo saltamos aleatoriamente
+		// Skip non-required components randomly
 		if !pattern.Required && g.rand.Intn(2) == 0 {
 			continue
 		}
 
 		part, err := g.buildComponent(race.ID, pattern.ComponentType, gender)
 		if err != nil {
-			return nil, err // early return dentro del loop
+			return nil, err // early return inside loop
 		}
 
 		parts = append(parts, part)
@@ -89,53 +89,52 @@ func (g *NameGenerator) buildParts(
 	return parts, nil
 }
 
-// buildComponent resuelve un único componente del nombre.
-// Si es "apodo_compuesto" delega a buildComposite, si no busca en componentes.
+// buildComponent resolves a single name component.
+// Delegates to buildComposite for "composite_nickname", otherwise queries components.
 func (g *NameGenerator) buildComponent(
 	raceID int,
 	componentType string,
 	gender domain.Gender,
 ) (string, error) {
-	if componentType == "apodo_compuesto" {
+	if componentType == "composite_nickname" {
 		return g.buildComposite(raceID)
 	}
 
-	// Para componentes normales buscamos candidatos y elegimos uno al azar
 	candidates, err := g.repo.FindComponents(raceID, componentType, gender)
 	if err != nil {
 		return "", err
 	}
 
 	if len(candidates) == 0 {
-		return "", errors.New("sin componentes para: " + componentType)
+		return "", errors.New("no components found for: " + componentType)
 	}
 
-	return g.pickRandom(candidates).Value, nil
+	return pickRandom(g.rand, candidates).Value, nil
 }
 
-// buildComposite arma el apodo compuesto de razas como el Mediano.
-// "primera" + "segunda" → "Olla" + "Caliente" → "Olla Caliente"
+// buildComposite builds the compound nickname for races like Halflings.
+// "first" + "second" → "Hot" + "Pot" → "Hot Pot"
 func (g *NameGenerator) buildComposite(raceID int) (string, error) {
-	primera, err := g.repo.FindCompositeParts(raceID, "primera")
+	first, err := g.repo.FindCompositeParts(raceID, "first")
 	if err != nil {
 		return "", err
 	}
 
-	segunda, err := g.repo.FindCompositeParts(raceID, "segunda")
+	second, err := g.repo.FindCompositeParts(raceID, "second")
 	if err != nil {
 		return "", err
 	}
 
-	if len(primera) == 0 || len(segunda) == 0 {
-		return "", errors.New("partes compuestas insuficientes para esta raza")
+	if len(first) == 0 || len(second) == 0 {
+		return "", errors.New("not enough composite parts for this race")
 	}
 
-	return g.pickRandom(primera).Value + " " + g.pickRandom(segunda).Value, nil
+	return pickRandom(g.rand, first).Value + " " + pickRandom(g.rand, second).Value, nil
 }
 
-// pickRandom elige un elemento aleatorio de un slice.
-// Función genérica — el [T any] significa que acepta cualquier tipo.
-// Esto es programación funcional en Go: función pura, sin side effects.
-func (g *NameGenerator) pickRandom[T any](items []T) T {
-	return items[g.rand.Intn(len(items))]
+// pickRandom selects a random element from a slice.
+// Standalone function (not a method) because Go does not allow
+// type parameters on struct methods.
+func pickRandom[T any](r *rand.Rand, items []T) T {
+	return items[r.Intn(len(items))]
 }
