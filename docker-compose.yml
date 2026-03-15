@@ -1,0 +1,34 @@
+services:
+  api:
+    build:
+      context: .
+      target: dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app                        >
+      - go-cache:/root/go/pkg/mod     # cache de módulos entre reinicios
+      - sqlite-data:/app/data         # SQLite persiste fuera del contenedor
+    environment:
+      - DB_PATH=/app/data/rpggen.db
+      - ENV=development
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    image: arigaio/atlas:latest
+    volumes:
+      - .:/app
+      - sqlite-data:/app/data
+    working_dir: /app>
+    command: >
+      schema apply
+      --url "sqlite:///app/data/rpggen.db"
+      --to "file://schema/schema.hcl"
+      --auto-approve
+    restart: "no"                     # corre una vez y termina
+
+volumes:
+  go-cache:
+  sqlite-data:
