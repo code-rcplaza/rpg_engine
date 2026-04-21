@@ -132,7 +132,8 @@ func (g *NameGenerator) buildComponent(
 		}
 		// If composite parts exist for this race, build composite last name
 		if len(parts) > 0 {
-			return g.buildComposite(raceID)
+			// Bolt Optimization: Pass the already loaded first parts to avoid redundant DB query
+			return g.buildComposite(raceID, parts)
 		}
 	}
 
@@ -150,12 +151,7 @@ func (g *NameGenerator) buildComponent(
 
 // buildComposite builds a compound last name for halflings.
 // "Brush" + "gather" → "Brushgather"
-func (g *NameGenerator) buildComposite(raceID int) (string, error) {
-	first, err := g.repo.FindCompositeParts(raceID, "first")
-	if err != nil {
-		return "", err
-	}
-
+func (g *NameGenerator) buildComposite(raceID int, first []domain.CompositePart) (string, error) {
 	second, err := g.repo.FindCompositeParts(raceID, "second")
 	if err != nil {
 		return "", err
