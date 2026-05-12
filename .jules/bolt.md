@@ -1,0 +1,3 @@
+## 2024-03-24 - Avoid N+1 DB calls for composite parts in name generation
+**Learning:** The `buildComponent` function already queries the repository to check for the existence of composite parts (`FindCompositeParts(raceID, "first")`). The delegated `buildComposite` function was then redundantly repeating this exact same query. Passing pre-fetched data down the call chain avoids these N+1 query patterns.
+**Action:** When a function fetches data to determine if it should call a sub-function, check if the sub-function needs that exact same data. If so, pass the pre-fetched data as an argument to the sub-function instead of re-querying the data store.
