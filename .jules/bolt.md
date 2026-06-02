@@ -1,0 +1,3 @@
+## 2023-10-27 - Eliminating redundant DB queries in generator methods
+**Learning:** The usecase layer was experiencing redundant N+1 database queries due to fetching the same data repeatedly. For example, `FindCompositeParts(raceID, "first")` was being executed twice during the name generation process because it was being evaluated for existence checking and then fetched again within the builder method.
+**Action:** Pre-fetch the necessary data, check for existence or size, and pass this pre-loaded data to delegated sub-functions to avoid additional database requests. This is a common performance optimization pattern for the usecase layer.
