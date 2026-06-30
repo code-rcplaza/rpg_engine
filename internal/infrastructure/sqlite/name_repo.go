@@ -107,13 +107,13 @@ func (r *NameRepo) FindPatternsByStyle(raceID int, styleID int) ([]domain.NamePa
 // queryPatterns is a private helper that runs a pattern query and maps the rows.
 func (r *NameRepo) queryPatterns(query string, args ...any) ([]domain.NamePattern, error) {
 	var rows []struct {
-		ID            int     `db:"id"`
-		RaceID        int     `db:"race_id"`
-		StyleID       *int    `db:"style_id"` // pointer because it's nullable
-		Order         int     `db:"order"`
-		ComponentType string  `db:"component_type"`
-		Required      int     `db:"required"`
-		MaxCount      int     `db:"max_count"`
+		ID            int    `db:"id"`
+		RaceID        int    `db:"race_id"`
+		StyleID       *int   `db:"style_id"` // pointer because it's nullable
+		Order         int    `db:"order"`
+		ComponentType string `db:"component_type"`
+		Required      int    `db:"required"`
+		MaxCount      int    `db:"max_count"`
 	}
 
 	err := r.db.Select(&rows, query, args...)

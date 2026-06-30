@@ -1,0 +1,3 @@
+## 2025-06-30 - Prevent redundant database query for composite parts
+**Learning:** In the `NameGenerator` usecase, when a race uses composite parts for their `last_name`, the `buildComponent` function would query the database to verify if composite parts exist for the race by querying for `"first"` parts. If they existed, it delegated to `buildComposite`, which would redundantly query the database for the exact same `"first"` parts again, resulting in an N+1 like inefficient access pattern.
+**Action:** When delegating to sub-functions to build parts of a domain entity, pre-fetched data from verification queries should be passed directly to the delegated function arguments instead of querying the repository again.
