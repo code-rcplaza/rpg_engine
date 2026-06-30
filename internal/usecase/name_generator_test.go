@@ -92,16 +92,16 @@ func TestGenerate(t *testing.T) {
 			wantParts: 1,
 		},
 		{
-			name:    "unknown race returns error",
+			name:     "unknown race returns error",
 			raceSlug: "cosmic_dragon",
-			gender:  domain.GenderNeutral,
-			wantErr: true,
+			gender:   domain.GenderNeutral,
+			wantErr:  true,
 		},
 		{
-			name:    "empty slug returns error",
+			name:     "empty slug returns error",
 			raceSlug: "",
-			gender:  domain.GenderNeutral,
-			wantErr: true,
+			gender:   domain.GenderNeutral,
+			wantErr:  true,
 		},
 	}
 
