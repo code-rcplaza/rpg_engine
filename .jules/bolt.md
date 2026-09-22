@@ -1,0 +1,3 @@
+## 2024-05-14 - Redundant Data Fetching in Usecase
+**Learning:** Found an N+1 style inefficiency in `name_generator.go`. The `buildComponent` function queries `FindCompositeParts(raceID, "first")` to check if composite parts exist. If they do, it calls `buildComposite` which queried the EXACT SAME parts again. This violates the principle of passing pre-fetched data to sub-functions.
+**Action:** When delegating to builder methods in the usecase layer, always pass any data that was already queried to make the routing decision, rather than letting the builder method re-query it from the repository.
