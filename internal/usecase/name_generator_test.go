@@ -224,3 +224,12 @@ func buildTestRepo() *mockNameRepo {
 		},
 	}
 }
+func BenchmarkGenerate_Halfling(b *testing.B) {
+	repo := buildTestRepo()
+	gen := newSeededGenerator(repo)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = gen.Generate("halfling", domain.GenderMale)
+	}
+}
