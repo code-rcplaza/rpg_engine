@@ -1,6 +1,6 @@
 module github.com/code-rcplaza/rpg_engine
 
-go 1.24.4
+go 1.24.3
 
 require (
 	github.com/jmoiron/sqlx v1.4.0
