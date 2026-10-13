@@ -1,0 +1,3 @@
+## 2026-10-13 - Redundant Database Query Anti-pattern in Delegation
+**Learning:** Found an N+1 style inefficiency where a parent method (`buildComponent`) fetched data to make a routing decision, then called a delegated method (`buildComposite`) which re-fetched the exact same data (`FindCompositeParts(..., "first")`). This is a codebase-specific anti-pattern where data fetched for routing isn't passed down to the handler.
+**Action:** When delegating to sub-functions in the usecase layer, always pass pre-fetched data as arguments instead of re-querying the repository to avoid redundant database calls.
